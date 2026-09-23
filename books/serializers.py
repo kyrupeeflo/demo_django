@@ -37,6 +37,6 @@ class BookSerializer(serializers.ModelSerializer):
     def validate(self, data):
         """Object-level validation: runs after all field validations pass."""
         # Example: cross-field check, adjust as needed
-        if self.title == "Chalisa" and self.author == "Tulsidas":
+        if data.get("title") == "Chalisa" and data.get("author") == "Tulsidas":
             raise serializers.ValidationError("Dont add holybooks here.")
         return data
