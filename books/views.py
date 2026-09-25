@@ -15,6 +15,21 @@ class BookViewSet(viewsets.ModelViewSet):
     serializer_class = BookSerializer
 
     @extend_schema(
+        summary="Delete all books",
+        description="Permanently deletes every Book row and returns how many were removed.",
+        request=None,
+        responses=inline_serializer(
+            "PurgeResponse",
+            {"deleted": serializers.IntegerField()},
+        ),
+    )
+    @action(detail=False, methods=["delete"], url_path=r"rip")
+    def purge(self, request):
+        """Delete all books: DELETE /api/books/purge/"""
+        deleted, _ = Book.objects.all().delete()
+        return Response({"deleted": deleted}, status=status.HTTP_200_OK)
+
+    @extend_schema(
         summary="Seed random books via Celery",
         description="Delegates bulk creation of random books to a Celery worker and "
         "returns immediately with a task id.",

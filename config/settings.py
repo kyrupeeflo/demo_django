@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'drf_spectacular',
+    'django_celery_beat',
     'books',
 ]
 
@@ -127,6 +128,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 CELERY_BROKER_URL = "redis://localhost:6379/0"
 CELERY_RESULT_BACKEND = "redis://localhost:6379/0"
+CELERY_TIMEZONE = TIME_ZONE  # keep Celery Beat aligned with Django's timezone
 
 # Django REST Framework / OpenAPI schema (drf-spectacular)
 REST_FRAMEWORK = {
