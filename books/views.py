@@ -7,7 +7,7 @@ from rest_framework.response import Response
 
 from .models import Book
 from .serializers import BookSerializer
-from .tasks import seed_books
+from .tasks import seed_books, start_backfill
 
 
 class BookViewSet(viewsets.ModelViewSet):
@@ -28,6 +28,45 @@ class BookViewSet(viewsets.ModelViewSet):
         """Delete all books: DELETE /api/books/purge/"""
         deleted, _ = Book.objects.all().delete()
         return Response({"deleted": deleted}, status=status.HTTP_200_OK)
+
+    @extend_schema(
+        summary="Start a self-disabling backfill schedule",
+        description="Creates a periodic schedule that adds books in chunks until "
+        "`target` is reached, then disables itself.",
+        request=inline_serializer(
+            "BackfillRequest",
+            {
+                "target": serializers.IntegerField(default=10000, required=False),
+                "chunk": serializers.IntegerField(default=500, required=False),
+                "every_seconds": serializers.IntegerField(default=60, required=False),
+            },
+        ),
+        responses=inline_serializer(
+            "BackfillResponse",
+            {
+                "schedule_name": serializers.CharField(),
+                "target": serializers.IntegerField(),
+                "chunk": serializers.IntegerField(),
+                "every_seconds": serializers.IntegerField(),
+            },
+        ),
+    )
+    @action(detail=False, methods=["post"])
+    def backfill(self, request):
+        """Start the backfill schedule: POST /api/books/backfill/"""
+        target = int(request.data.get("target", 10000))
+        chunk = int(request.data.get("chunk", 500))
+        every_seconds = int(request.data.get("every_seconds", 60))
+        name = start_backfill(target=target, chunk=chunk, every_seconds=every_seconds)
+        return Response(
+            {
+                "schedule_name": name,
+                "target": target,
+                "chunk": chunk,
+                "every_seconds": every_seconds,
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )
 
     @extend_schema(
         summary="Seed random books via Celery",
