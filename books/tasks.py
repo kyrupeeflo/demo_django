@@ -49,3 +49,46 @@ def seed_books(count=10000):
     # ignore_conflicts skips the rare chance an ISBN already exists in the DB.
     created = Book.objects.bulk_create(books, batch_size=10, ignore_conflicts=True)
     return {"requested": count, "created": len(created)}
+
+
+@shared_task(bind=True)
+def backfill_books(self, target=10000, chunk=500, schedule_name=None):
+    """Create books in chunks each run; disable the schedule once `target` is reached."""
+    from django_celery_beat.models import PeriodicTask
+
+    # Reuse the bulk-create logic for a single chunk.
+    seed_books(chunk)
+
+    total = Book.objects.count()
+    done = total >= target
+
+    if done and schedule_name:
+        # Turn the recurring schedule off. Beat stops sending it on its next tick.
+        PeriodicTask.objects.filter(name=schedule_name).update(enabled=False)
+
+    return {"total": total, "target": target, "done": done}
+
+
+def start_backfill(target=10000, chunk=500, every_seconds=60):
+    """Create (or update) a self-disabling periodic schedule that backfills books."""
+    import json
+
+    from django_celery_beat.models import IntervalSchedule, PeriodicTask
+
+    schedule, _ = IntervalSchedule.objects.get_or_create(
+        every=every_seconds, period=IntervalSchedule.SECONDS,
+    )
+    name = "backfill-books"
+    PeriodicTask.objects.update_or_create(
+        name=name,
+        defaults={
+            "interval": schedule,
+            "task": "books.tasks.backfill_books",
+            # The task needs its own schedule name so it can disable this row.
+            "kwargs": json.dumps(
+                {"target": target, "chunk": chunk, "schedule_name": name}
+            ),
+            "enabled": True,
+        },
+    )
+    return name
